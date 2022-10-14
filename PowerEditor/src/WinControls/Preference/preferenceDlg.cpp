@@ -2887,6 +2887,7 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 			// Tab settings
 			//
 			::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, nppGUI._tabSize, FALSE);
+			::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, nppGUI._indentSize, FALSE);
 			::SendDlgItemMessage(_hSelf, IDC_CHECK_REPLACEBYSPACE, BM_SETCHECK, nppGUI._tabReplacedBySpace, 0);
 
 			::SendDlgItemMessage(_hSelf, IDC_LIST_TABSETTNG, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("[Default]")));
@@ -2926,7 +2927,7 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 			const auto& hdcStatic = reinterpret_cast<HDC>(wParam);
 			// handle blurry text with disabled states for the affected static controls
 			const size_t index = ::SendDlgItemMessage(_hSelf, IDC_LIST_TABSETTNG, LB_GETCURSEL, 0, 0);
-			if ((index > 0) && (dlgCtrlID == IDC_TABSIZE_STATIC))
+			if ((index > 0) && ((dlgCtrlID == IDC_TABSIZE_STATIC) || (dlgCtrlID == IDC_INDENTSIZE_STATIC)))
 			{
 				const Lang* lang = nppParam.getLangFromIndex(index - 1);
 				if (lang == nullptr)
@@ -2995,31 +2996,38 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 						{
 							Lang* lang = nppParam.getLangFromIndex(index - 1);
 							if (!lang) return FALSE;
-							bool useDefaultTab = (lang->_tabSize == -1 || lang->_tabSize == 0);
+							bool useDefaultTab = lang->_useDefaultTab;
 
 							::SendMessage(::GetDlgItem(_hSelf, IDC_CHECK_DEFAULTTABVALUE), BM_SETCHECK, useDefaultTab, 0);
 
-							int size = useDefaultTab ? nppGUI._tabSize : lang->_tabSize;
-							::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, size, FALSE);
+							int tabSize = useDefaultTab ? nppGUI._tabSize : lang->_tabSize;
+							int indentSize = useDefaultTab ? nppGUI._indentSize : lang->_indentSize;
+							::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, tabSize, FALSE);
+							::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, indentSize, FALSE);
 							::SendMessage(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), BM_SETCHECK, useDefaultTab ? nppGUI._tabReplacedBySpace : lang->_isTabReplacedBySpace, 0);
 							::EnableWindow(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), !useDefaultTab);
 							::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_TABSIZEVAL), !useDefaultTab);
+							::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_INDENTSIZEVAL), !useDefaultTab);
 
 							if (!useDefaultTab)
 							{
 								::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, lang->_tabSize, FALSE);
+								::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, lang->_indentSize, FALSE);
 								::SendMessage(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), BM_SETCHECK, lang->_isTabReplacedBySpace, 0);
 							}
 						}
 						else
 						{
 							::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, nppGUI._tabSize, FALSE);
+							::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, nppGUI._indentSize, FALSE);
 							::EnableWindow(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), TRUE);
 							::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_TABSIZEVAL), TRUE);
+							::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_INDENTSIZEVAL), TRUE);
 							::SendMessage(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), BM_SETCHECK, nppGUI._tabReplacedBySpace, 0);
 						}
 
 						redrawDlgItem(IDC_TABSIZE_STATIC);
+						redrawDlgItem(IDC_INDENTSIZE_STATIC);
 
 						return TRUE;
 					}
@@ -3096,6 +3104,48 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 							::SendMessage(::GetParent(_hParent), NPPM_INTERNAL_SETTING_TAB_SIZE, 0, 0);
 							return TRUE;
 						}
+						case IDC_EDIT_INDENTSIZEVAL:
+						{
+							const auto indentSize = ::GetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, nullptr, FALSE);
+							if (indentSize < 1)
+							{
+								return FALSE;
+							}
+
+							const bool useDefaultTab = isCheckedOrNot(IDC_CHECK_DEFAULTTABVALUE);
+							const size_t index = ::SendDlgItemMessage(_hSelf, IDC_LIST_TABSETTNG, LB_GETCURSEL, 0, 0);
+							if (!useDefaultTab && index > 0)
+							{
+								Lang* lang = nppParam.getLangFromIndex(index - 1);
+								if (lang == nullptr)
+								{
+									return FALSE;
+								}
+
+								if (lang->_langID == L_JS)
+								{
+									Lang* ljs = nppParam.getLangFromID(L_JAVASCRIPT);
+									ljs->_indentSize = indentSize;
+								}
+								else if (lang->_langID == L_JAVASCRIPT)
+								{
+									Lang* ljavascript = nppParam.getLangFromID(L_JS);
+									ljavascript->_indentSize = indentSize;
+								}
+
+								lang->_indentSize = indentSize;
+
+								// write in langs.xml
+								nppParam.insertTabInfo(lang->getLangName(), lang->getTabInfo());
+							}
+							else
+							{
+								nppGUI._indentSize = indentSize;
+							}
+
+							::SendMessage(::GetParent(_hParent), NPPM_INTERNAL_SETTING_INDENT_SIZE, 0, 0);
+							return TRUE;
+						}
 
 						default:
 						{
@@ -3128,6 +3178,29 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 								}
 
 								::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, prevSize, FALSE);
+								return TRUE;
+							}
+							return FALSE;
+						}
+						case IDC_EDIT_INDENTSIZEVAL:
+						{
+							const auto indentSize = ::GetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, nullptr, FALSE);
+
+							if (indentSize < 1)
+							{
+								const bool useDefaultTab = isCheckedOrNot(IDC_CHECK_DEFAULTTABVALUE);
+								const size_t index = ::SendDlgItemMessage(_hSelf, IDC_LIST_TABSETTNG, LB_GETCURSEL, 0, 0);
+								auto prevSize = nppGUI._indentSize;
+								if (!useDefaultTab && index > 0)
+								{
+									Lang* lang = nppParam.getLangFromIndex(index - 1);
+									if (lang != nullptr && lang->_indentSize > 0)
+									{
+										prevSize = lang->_indentSize;
+									}
+								}
+
+								::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, prevSize, FALSE);
 								return TRUE;
 							}
 							return FALSE;
@@ -3297,7 +3370,6 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 					::DrawMenuBar(grandParent);
 					return TRUE;
 				}
-
 				case IDC_CHECK_REPLACEBYSPACE:
 				{
 					bool isTabReplacedBySpace = BST_CHECKED == ::SendMessage(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), BM_GETCHECK, 0, 0);
@@ -3346,20 +3418,25 @@ intptr_t CALLBACK LanguageSubDlg::run_dlgProc(UINT message, WPARAM wParam, LPARA
 						return FALSE;
 
 					//- Set tab setting in choosed language
-					lang->_tabSize = useDefaultTab ? 0 : nppGUI._tabSize;
-					lang->_isTabReplacedBySpace = useDefaultTab ? false : nppGUI._tabReplacedBySpace;
+					lang->_useDefaultTab = useDefaultTab;
+					lang->_tabSize = nppGUI._tabSize;
+					lang->_indentSize = nppGUI._indentSize;
+					lang->_isTabReplacedBySpace = nppGUI._tabReplacedBySpace;
 
 					//- set visual effect
 					::SetDlgItemInt(_hSelf, IDC_EDIT_TABSIZEVAL, useDefaultTab ? nppGUI._tabSize : lang->_tabSize, FALSE);
+					::SetDlgItemInt(_hSelf, IDC_EDIT_INDENTSIZEVAL, useDefaultTab ? nppGUI._indentSize : lang->_indentSize, FALSE);
 					setChecked(IDC_CHECK_REPLACEBYSPACE, useDefaultTab ? nppGUI._tabReplacedBySpace : lang->_isTabReplacedBySpace);
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_CHECK_REPLACEBYSPACE), !useDefaultTab);
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_TABSIZEVAL), !useDefaultTab);
+					::EnableWindow(::GetDlgItem(_hSelf, IDC_EDIT_INDENTSIZEVAL), !useDefaultTab);
 
 					// write in langs.xml
 					if (useDefaultTab)
 						nppParam.insertTabInfo(lang->getLangName(), -1);
 
 					redrawDlgItem(IDC_TABSIZE_STATIC);
+					redrawDlgItem(IDC_INDENTSIZE_STATIC);
 
 					return TRUE;
 				}
