@@ -5421,12 +5421,19 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 		else if (!lstrcmp(nm, L"TabSetting"))
 		{
 			int i;
-			const wchar_t* val = element->Attribute(L"size", &i);
+			const wchar_t* val = element->Attribute(L"indentSize", &i);
+			if (val)
+				_nppGUI._indentSize = i;
+
+			if (_nppGUI._indentSize < 1)
+				_nppGUI._indentSize = 4;
+
+			val = element->Attribute(L"tabSize", &i);
 			if (val)
 				_nppGUI._tabSize = i;
 
-			if ((_nppGUI._tabSize == -1) || (_nppGUI._tabSize == 0))
-				_nppGUI._tabSize = 4;
+			if (_nppGUI._tabSize < 1)
+				_nppGUI._tabSize = 8;
 
 			val = element->Attribute(L"replaceBySpace");
 			if (val)
@@ -7441,13 +7448,14 @@ void NppParameters::createXmlTreeFromGUIParams()
 		GUIConfigElement->InsertEndChild(TiXmlText(pStr));
 	}
 
-	// <GUIConfig name = "TabSetting" size = "4" replaceBySpace = "no" backspaceUnindent = "no" / >
+	// <GUIConfig name = "TabSetting" indentSize = "4" tabSize = "8" replaceBySpace = "no" backspaceUnindent = "no" / >
 	{
 		TiXmlElement *GUIConfigElement = (newGUIRoot->InsertEndChild(TiXmlElement(L"GUIConfig")))->ToElement();
 		GUIConfigElement->SetAttribute(L"name", L"TabSetting");
 		const wchar_t *pStr = _nppGUI._tabReplacedBySpace ? L"yes" : L"no";
 		GUIConfigElement->SetAttribute(L"replaceBySpace", pStr);
-		GUIConfigElement->SetAttribute(L"size", _nppGUI._tabSize);
+		GUIConfigElement->SetAttribute(L"indentSize", _nppGUI._indentSize);
+		GUIConfigElement->SetAttribute(L"tabSize", _nppGUI._tabSize);
 		pStr = _nppGUI._backspaceUnindent ? L"yes" : L"no";
 		GUIConfigElement->SetAttribute(L"backspaceUnindent", pStr);
 	}
